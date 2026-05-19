@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>SMPP v3.4 Web Client</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+
+    <!-- ════ HEADER ════ -->
+    <header class="header">
+      <div class="header-left">
+        <div class="header-logo">◈</div>
+        <div class="header-title">
+          <h1>SMPP v3.4 Web Client</h1>
+          <span>Smsc Administration Interface</span>
+        </div>
+      </div>
+      <div class="header-status">
+        <span id="status-indicator" class="status-dot disconnected"></span>
+        <span id="status-text">Disconnected</span>
+      </div>
+    </header>
+
+    <div class="main-grid">
+
+      <!-- ── LEFT COLUMN ── -->
+      <div class="left-col">
+
+        <!-- Panel 1: Connection -->
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-icon">⚡</div>
+            <h2>SMSC Connection</h2>
+          </div>
+          <div class="panel-body">
+            <div class="form-row">
+              <div class="form-group">
+                <label>Host</label>
+                <input type="text" id="smsc-host" value="127.0.0.1" placeholder="SMSC hostname or IP">
+              </div>
+              <div class="form-group" style="max-width:100px;">
+                <label>Port</label>
+                <input type="number" id="smsc-port" value="2775" placeholder="2775">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>System ID</label>
+                <input type="text" id="smsc-system-id" placeholder="Username">
+              </div>
+              <div class="form-group">
+                <label>Password</label>
+                <input type="password" id="smsc-password" placeholder="Password">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>System Type</label>
+                <input type="text" id="smsc-system-type" placeholder="Optional">
+              </div>
+              <div class="form-group">
+                <label>Bind Mode</label>
+                <select id="smsc-bind-mode">
+                  <option value="transceiver">Transceiver</option>
+                  <option value="transmitter">Transmitter</option>
+                  <option value="receiver">Receiver</option>
+                </select>
+              </div>
+            </div>
+            <div class="btn-group">
+              <button class="btn btn-primary" id="btn-connect">CONNECT</button>
+              <button class="btn btn-secondary" id="btn-disconnect" disabled>DISCONNECT</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Panel 2: Message Defaults -->
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-icon">⚙</div>
+            <h2>Message Defaults</h2>
+          </div>
+          <div class="panel-body">
+            <div class="form-row">
+              <div class="form-group">
+                <label>Source Address</label>
+                <input type="text" id="def-source-addr" placeholder="MyApp">
+              </div>
+              <div class="form-group">
+                <label>Source TON</label>
+                <select id="def-source-ton">
+                  <option value="0">Unknown</option>
+                  <option value="1" selected>International</option>
+                  <option value="2">National</option>
+                  <option value="5">Alphanumeric</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Source NPI</label>
+                <select id="def-source-npi">
+                  <option value="0">Unknown</option>
+                  <option value="1" selected>ISDN (E.164)</option>
+                  <option value="3">Data (X.121)</option>
+                  <option value="6">Land Mobile</option>
+                  <option value="8">National</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Dest TON</label>
+                <select id="def-dest-ton">
+                  <option value="0">Unknown</option>
+                  <option value="1" selected>International</option>
+                  <option value="2">National</option>
+                  <option value="5">Alphanumeric</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Dest NPI</label>
+                <select id="def-dest-npi">
+                  <option value="0">Unknown</option>
+                  <option value="1" selected>ISDN (E.164)</option>
+                  <option value="3">Data (X.121)</option>
+                  <option value="6">Land Mobile</option>
+                  <option value="8">National</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Data Coding</label>
+                <select id="def-data-coding">
+                  <option value="0">GSM-7 (default)</option>
+                  <option value="1">ASCII</option>
+                  <option value="3">Latin-1</option>
+                  <option value="4">Binary</option>
+                  <option value="8">UCS-2 (Unicode)</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Priority</label>
+                <select id="def-priority">
+                  <option value="0">Normal</option>
+                  <option value="1">High</option>
+                  <option value="2">Urgent</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Service Type</label>
+                <input type="text" id="def-service-type" placeholder="Optional">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group" style="flex-direction:row;align-items:center;gap:8px;">
+                <label style="margin-bottom:0;">Request DLR</label>
+                <input type="checkbox" id="def-registered-delivery" checked>
+              </div>
+              <div class="form-group">
+                <label>Validity</label>
+                <input type="text" id="def-validity" placeholder="e.g. 2400">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Schedule</label>
+                <input type="text" id="def-schedule" placeholder="YYMMDDHHMMSS">
+              </div>
+              <div class="form-group">
+                <label>ESM Class</label>
+                <input type="text" id="def-esm-class" value="0">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Protocol ID</label>
+                <input type="text" id="def-protocol-id" value="0">
+              </div>
+              <div class="form-group" style="flex-direction:row;align-items:center;gap:8px;">
+                <label style="margin-bottom:0;">Replace If Present</label>
+                <input type="checkbox" id="def-replace-if-present">
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Default Msg ID</label>
+              <input type="text" id="def-sm-default-msg" value="0">
+            </div>
+          </div>
+        </div>
+
+        <!-- Panel 3: Advanced -->
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-icon">✦</div>
+            <h2>Advanced Settings</h2>
+          </div>
+          <div class="panel-body">
+            <div class="form-row">
+              <div class="form-group">
+                <label>Enquire Link (ms)</label>
+                <input type="number" id="advanced-enquire-link" value="30000">
+              </div>
+              <div class="form-group">
+                <label>Window Size</label>
+                <input type="number" id="advanced-window-size" value="10">
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ── RIGHT COLUMN ── -->
+      <div class="right-col">
+
+        <!-- Panel 4: Send Message -->
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-icon">✉</div>
+            <h2>Send Message</h2>
+          </div>
+          <div class="panel-body">
+            <div class="form-row">
+              <div class="form-group" style="max-width:140px;">
+                <label>Mode</label>
+                <select id="send-destination-mode">
+                  <option value="single">Single</option>
+                  <option value="multiple">Multiple</option>
+                </select>
+              </div>
+              <div class="form-group" id="destination-single-group">
+                <label>Destination</label>
+                <input type="text" id="send-destination" placeholder="+1234567890">
+              </div>
+            </div>
+            <div class="form-group hidden" id="dest-multiple-group">
+              <label>Destinations (one per line)</label>
+              <textarea id="send-destinations" placeholder="+1234567890&#10;+1987654321&#10;+447911123456" style="min-height:60px;"></textarea>
+            </div>
+            <div class="form-group">
+              <label>Message</label>
+              <textarea id="send-message" placeholder="Type your SMS message..." style="min-height:80px;"></textarea>
+            </div>
+            <div class="char-counter" id="send-char-count">
+              <span class="count-current" id="char-current">0</span>
+              <span class="count-limit"> / <span id="char-limit">160</span></span>
+              <span class="count-parts" id="char-parts"></span>
+            </div>
+            <div class="encoding-info" id="encoding-info"></div>
+
+            <div class="override-toggle" id="override-toggle">
+              <span>▶</span> Override Section
+            </div>
+            <div class="override-section" id="override-section">
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Source Addr</label>
+                  <input type="text" id="override-source-addr">
+                </div>
+                <div class="form-group">
+                  <label>Source TON</label>
+                  <select id="override-source-ton">
+                    <option value="0">Unknown</option>
+                    <option value="1">International</option>
+                    <option value="2">National</option>
+                    <option value="5">Alphanumeric</option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Data Coding</label>
+                  <select id="override-data-coding">
+                    <option value="0">GSM-7</option>
+                    <option value="1">ASCII</option>
+                    <option value="3">Latin-1</option>
+                    <option value="4">Binary</option>
+                    <option value="8">UCS-2</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Message Class</label>
+                  <select id="override-message-class">
+                    <option value="1">Normal</option>
+                    <option value="0">Flash</option>
+                    <option value="2">SIM</option>
+                    <option value="3">TE</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div class="btn-group">
+              <button class="btn btn-primary" id="btn-send">SEND</button>
+              <button class="btn btn-secondary" id="btn-clear-form">CLEAR</button>
+            </div>
+
+            <div class="batch-progress" id="batch-progress">
+              <div class="progress-bar">
+                <div class="progress-fill" id="batch-progress-bar"></div>
+              </div>
+              <div class="progress-text" id="batch-progress-text">Sending...</div>
+              <div class="progress-text" id="batch-status"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Panel 5: Replace Message -->
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-icon">↻</div>
+            <h2>Replace Message</h2>
+          </div>
+          <div class="panel-body">
+            <div class="form-group">
+              <label>Message ID</label>
+              <input type="text" id="replace-message-id" placeholder="Message ID from submit_sm_resp">
+            </div>
+            <div class="form-group">
+              <label>New Message</label>
+              <textarea id="replace-message" placeholder="Replacement content" style="min-height:60px;"></textarea>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Source Addr (optional)</label>
+                <input type="text" id="replace-source-addr" placeholder="Override source">
+              </div>
+              <div class="form-group">
+                <label>Dest Addr (optional)</label>
+                <input type="text" id="replace-destination-addr" placeholder="Override destination">
+              </div>
+            </div>
+            <button class="btn btn-primary" id="btn-replace">REPLACE</button>
+          </div>
+        </div>
+
+        <!-- Panel 6: Cancel SMS -->
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-icon">✕</div>
+            <h2>Cancel SMS</h2>
+          </div>
+          <div class="panel-body">
+            <div class="form-row">
+              <div class="form-group">
+                <label>Cancel By</label>
+                <select id="cancel-by">
+                  <option value="message_id">Message ID</option>
+                  <option value="source_dest">Source + Destination</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-group" id="cancel-message-id-group">
+              <label>Message ID</label>
+              <input type="text" id="cancel-message-id" placeholder="Message ID to cancel">
+            </div>
+            <div class="form-group hidden" id="cancel-source-dest-group">
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Source Address</label>
+                  <input type="text" id="cancel-source-addr" placeholder="Source address">
+                </div>
+                <div class="form-group">
+                  <label>Destination Address</label>
+                  <input type="text" id="cancel-destination-addr" placeholder="Destination address">
+                </div>
+              </div>
+            </div>
+            <button class="btn btn-danger" id="btn-cancel">CANCEL</button>
+          </div>
+        </div>
+
+        <!-- Panel 7: Stats -->
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-icon">📊</div>
+            <h2>Statistics</h2>
+          </div>
+          <div class="panel-body">
+            <div class="form-row text-center" style="gap:16px;justify-content:center;">
+              <div><span style="color:#00ffff;">Sent</span><br><span id="stat-sent" style="font-size:24px;font-weight:700;">0</span></div>
+              <div><span style="color:#00ff88;">Delivered</span><br><span id="stat-delivered" style="font-size:24px;font-weight:700;">0</span></div>
+              <div><span style="color:#ff3355;">Failed</span><br><span id="stat-failed" style="font-size:24px;font-weight:700;">0</span></div>
+              <div><span style="color:#8b5cf6;">Received</span><br><span id="stat-received" style="font-size:24px;font-weight:700;">0</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Panel 8: Incoming Messages -->
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-icon">📥</div>
+            <h2>Incoming Messages</h2>
+            <button class="btn btn-secondary" id="btn-clear-inbox" style="margin-left:auto;padding:4px 14px;font-size:10px;">CLEAR</button>
+          </div>
+          <div class="panel-body">
+            <div class="table-container" id="inbox-entries">
+              <table>
+                <thead><tr>
+                  <th>Time</th>
+                  <th>From</th>
+                  <th>To</th>
+                  <th>Message</th>
+                  <th>Type</th>
+                </tr></thead>
+                <tbody id="inbox-entries-tbody">
+                  <tr><td colspan="5"><div class="empty-state">No incoming messages</div></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Panel 9: Delivery Reports -->
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-icon">📬</div>
+            <h2>Delivery Reports</h2>
+            <button class="btn btn-secondary" id="btn-clear-dlr" style="margin-left:auto;padding:4px 14px;font-size:10px;">CLEAR</button>
+          </div>
+          <div class="panel-body">
+            <div class="table-container" id="dlr-entries">
+              <table>
+                <thead><tr>
+                  <th>Time</th>
+                  <th>Message ID</th>
+                  <th>Destination</th>
+                  <th>Status</th>
+                  <th>Done</th>
+                </tr></thead>
+                <tbody id="dlr-entries-tbody">
+                  <tr><td colspan="5"><div class="empty-state">No delivery reports</div></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ════ EVENT LOG ════ -->
+    <div class="panel log-panel">
+      <div class="panel-header">
+        <div class="panel-icon">≡</div>
+        <h2>Event Log</h2>
+        <button class="btn btn-secondary" id="btn-clear-log" style="margin-left:auto;padding:4px 14px;font-size:10px;">CLEAR</button>
+      </div>
+      <div class="log-container" id="log-entries">
+        <div class="log-entry info">
+          <span class="log-time">--:--:--</span>
+          <span class="log-message">SMPP Web Client initialized</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer-text">SMPP v3.4 Web Client v2.0 • protocol administration interface</div>
+
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="app.js?v=2.0.0-fix4"></script>
+</body>
+</html>

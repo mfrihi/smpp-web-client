@@ -1,0 +1,26 @@
+{
+  "name": "smpp-web-client",
+  "version": "2.0.0",
+  "description": "SMPP v3.4 Web Client with WebSocket UI - Send, Receive, Replace, Cancel SMS",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "keywords": ["smpp", "sms", "gateway", "smsc", "websocket", "socket.io"],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "^4.6.0",
+    "smpp": "^0.6.0-rc.4",
+    "dotenv": "^16.3.1",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
