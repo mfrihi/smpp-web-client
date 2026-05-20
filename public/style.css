@@ -285,6 +285,18 @@ body::after {
   letter-spacing: 0.8px;
 }
 
+/* Disabled field styling — grayed out when split mode doesn't need them */
+.field-disabled {
+  opacity: 0.35;
+  pointer-events: none;
+}
+.field-disabled input,
+.field-disabled select {
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.05);
+}
+
 input[type="text"],
 input[type="number"],
 input[type="password"],
@@ -748,6 +760,69 @@ code {
   border-radius: 4px;
   font-size: 11px;
   color: #00ffff;
+}
+
+/* ── Split Preview ───────────────────────────────────────────────────────── */
+
+.split-preview {
+  padding: 10px 12px;
+  margin: 8px 0;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  transition: all 0.3s ease;
+}
+.split-preview.info {
+  background: rgba(0, 255, 200, 0.08);
+  border-left: 3px solid #00ffc8;
+  color: #00ffc8;
+}
+.split-preview.warning {
+  background: rgba(255, 187, 0, 0.08);
+  border-left: 3px solid #ffbb00;
+  color: #ffbb00;
+}
+.split-preview.error {
+  background: rgba(255, 68, 68, 0.08);
+  border-left: 3px solid #ff4444;
+  color: #ff4444;
+}
+.segment-details {
+  margin-top: 8px;
+  padding-top: 5px;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.35);
+  border-top: 1px dashed rgba(255, 255, 255, 0.06);
+}
+.segment-badge {
+  display: inline-block;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 2px 8px;
+  border-radius: 10px;
+  margin-right: 5px;
+  margin-bottom: 3px;
+  font-family: 'Space Grotesk', monospace;
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* Split config row */
+.split-config {
+  margin-top: 10px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+#manual-segments-container {
+  margin-top: 8px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 4px;
+}
+#manual-segments {
+  font-family: 'Space Grotesk', monospace;
+  font-size: 0.85rem;
+  min-height: 60px;
 }
 
 /* ── Footer ─────────────────────────────────────────────────────────────── */

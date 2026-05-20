@@ -28,7 +28,8 @@ const state = {
     messagesFailed: 0,
     messagesReceived: 0
   },
-  batchState: null
+  batchState: null,
+  splitPreview: null
 };
 
 // =============================================================================
@@ -106,19 +107,7 @@ function detectRtl(text) {
  * Copy current default values to the override section fields.
  */
 function populateOverrideWithDefaults() {
-  const fieldMappings = {
-    'override-source-addr': 'source_addr',
-    'override-source-ton': 'source_addr_ton',
-    'override-source-npi': 'source_addr_npi',
-    'override-data-coding': 'data_coding',
-    'override-message-class': 'message_class'
-  };
-  for (const [elId, key] of Object.entries(fieldMappings)) {
-    const el = document.getElementById(elId);
-    if (el && state.defaults[key] !== undefined) {
-      el.value = state.defaults[key];
-    }
-  }
+  // No override fields to populate — split config uses its own defaults
 }
 
 // =============================================================================
@@ -177,19 +166,21 @@ function renderLogs() {
  * Render incoming messages into the inbox table.
  */
 function renderIncomingMessages() {
-  const tbody = document.getElementById('inbox-entries');
+  const tbody = document.getElementById('inbox-entries-tbody');
   if (!tbody) return;
   let html = '';
   for (const msg of state.incomingMessages) {
     const time = formatTime(msg.received_at || msg.time);
-    const isRtl = detectRtl(msg.short_message || msg.text || '');
+    const msgText = msg.message || msg.short_message || msg.text || '';
+    const isRtl = detectRtl(msgText);
     const dir = isRtl ? ' dir="rtl"' : '';
-    const displayText = truncate(msg.short_message || msg.text || '', 160);
+    const displayText = truncate(msgText, 160);
     html += '<tr>';
     html += '<td>' + escapeHtml(time) + '</td>';
     html += '<td>' + escapeHtml(msg.source_addr || msg.source || '') + '</td>';
     html += '<td>' + escapeHtml(msg.destination_addr || msg.destination || '') + '</td>';
     html += '<td' + dir + '>' + escapeHtml(displayText) + '</td>';
+    html += '<td>' + (msg.esm_class !== undefined ? '0x' + msg.esm_class.toString(16).padStart(2, '0') : 'SMS') + '</td>';
     html += '</tr>';
   }
   tbody.innerHTML = html;
@@ -199,22 +190,22 @@ function renderIncomingMessages() {
  * Render delivery reports into the DLR table with color-coded status badges.
  */
 function renderDeliveryReports() {
-  const tbody = document.getElementById('dlr-entries');
+  const tbody = document.getElementById('dlr-entries-tbody');
   if (!tbody) return;
   let html = '';
   for (const dlr of state.deliveryReports) {
     const time = formatTime(dlr.received_at || dlr.time);
-    const status = (dlr.stat || dlr.status || '').toLowerCase();
+    const status = (dlr.status || dlr.stat || '').toLowerCase();
     let badgeClass = 'badge badge-';
-    let badgeText = escapeHtml(dlr.stat || dlr.status || 'UNKNOWN');
-    // Color-code status badges
-    if (status === 'delivered' || status === 'delivrd') {
+    const badgeText = escapeHtml(dlr.status || dlr.stat || 'UNKNOWN');
+    // Color-code status badges per SMPP standard
+    if (status === 'delivrd' || status === 'delivered') {
       badgeClass += 'success';
-    } else if (status === 'failed' || status === 'undeliv' || status === 'rejected') {
+    } else if (status === 'undeliv' || status === 'undelivered' || status === 'rejectd' || status === 'rejected') {
       badgeClass += 'danger';
     } else if (status === 'expired' || status === 'deleted') {
       badgeClass += 'warning';
-    } else if (status === 'accepted' || status === 'enroute' || status === 'accepted') {
+    } else if (status === 'acceptd' || status === 'accepted' || status === 'enroute') {
       badgeClass += 'info';
     } else {
       badgeClass += 'secondary';
@@ -222,10 +213,11 @@ function renderDeliveryReports() {
     html += '<tr>';
     html += '<td>' + escapeHtml(time) + '</td>';
     html += '<td>' + escapeHtml(dlr.message_id || '') + '</td>';
-    html += '<td>' + escapeHtml(dlr.source_addr || dlr.source || '') + '</td>';
-    html += '<td>' + escapeHtml(dlr.destination_addr || dlr.destination || '') + '</td>';
+    html += '<td>' + escapeHtml(dlr.source_addr || '') + '</td>';
+    html += '<td>' + escapeHtml(dlr.destination_addr || '') + '</td>';
     html += '<td><span class="' + badgeClass + '">' + badgeText + '</span></td>';
-    html += '<td>' + escapeHtml(dlr.error_code || '') + '</td>';
+    html += '<td>' + escapeHtml(String(dlr.submitted_count !== undefined ? dlr.submitted_count : '0')) + '</td>';
+    html += '<td>' + escapeHtml(String(dlr.delivered_count !== undefined ? dlr.delivered_count : '0')) + '</td>';
     html += '</tr>';
   }
   tbody.innerHTML = html;
@@ -272,17 +264,17 @@ socket.on('smsc:status', function (data) {
   const text = document.getElementById('status-text');
   const connectBtn = document.getElementById('btn-connect');
   const disconnectBtn = document.getElementById('btn-disconnect');
-  const status = data && data.status ? data.status : 'disconnected';
+  const status = data && (data.state || data.status) ? (data.state || data.status) : 'disconnected';
   state.smscStatus = status;
   // Update indicator class
   if (indicator) {
-    indicator.className = 'status-indicator';
+    indicator.className = 'status-dot';
     if (status === 'connected' || status === 'bound') {
-      indicator.classList.add('status-connected');
+      indicator.classList.add('connected');
     } else if (status === 'connecting' || status === 'binding') {
-      indicator.classList.add('status-connecting');
+      indicator.classList.add('connecting');
     } else {
-      indicator.classList.add('status-disconnected');
+      indicator.classList.add('disconnected');
     }
   }
   // Update status text
@@ -297,6 +289,20 @@ socket.on('smsc:status', function (data) {
     disconnectBtn.disabled = (status === 'disconnected' || status === 'unbound');
   }
   addLogEntry('info', 'SMSC status changed to: ' + status);
+});
+
+// Listen for explicit connection errors
+socket.on('smsc:error', function (data) {
+  const msg = data && data.message ? data.message : 'Unknown connection error';
+  addLogEntry('error', msg);
+  const indicator = document.getElementById('status-indicator');
+  const text = document.getElementById('status-text');
+  if (indicator) {
+    indicator.className = 'status-dot';
+    indicator.classList.add('disconnected');
+  }
+  if (text) text.textContent = 'Error';
+  state.smscStatus = 'disconnected';
 });
 
 socket.on('config:defaults', function (data) {
@@ -318,12 +324,17 @@ socket.on('config:defaults', function (data) {
     'def-esm-class': 'esm_class',
     'def-protocol-id': 'protocol_id',
     'def-replace-if-present': 'replace_if_present_flag',
-    'def-sm-default-msg': 'sm_default_msg_id'
+    'def-sm-default-msg': 'sm_default_msg_id',
+    'def-message-class': 'message_class'
   };
   for (const [elId, key] of Object.entries(fieldMappings)) {
     const el = document.getElementById(elId);
     if (el && data[key] !== undefined) {
-      el.value = data[key];
+      if (el.type === 'checkbox') {
+        el.checked = data[key] === 1 || data[key] === true;
+      } else {
+        el.value = data[key];
+      }
     }
   }
 });
@@ -371,17 +382,24 @@ socket.on('message:dlr', function (data) {
     state.stats.messagesFailed++;
   }
   updateStatsDisplay();
-  addLogEntry('info', 'DLR received for message: ' + (data.message_id || 'unknown'));
 });
 
 socket.on('message:batch_progress', function (data) {
   if (!data) return;
-  state.batchState = data;
+  // Normalise backend field names (completed → sent, phase → complete/status)
+  state.batchState = {
+    total: data.total || 0,
+    sent: data.sent || data.completed || 0,
+    status: data.status || (data.phase === 'complete' ? 'Done' : (data.phase === 'start' ? 'Sending...' : 'Sending...')),
+    complete: data.complete || data.phase === 'complete',
+    error: data.error || null,
+    results: data.results || [],
+  };
   renderBatchProgress();
-  if (data.complete) {
-    addLogEntry('success', 'Batch complete: ' + (data.sent || 0) + ' messages sent');
-  } else if (data.error) {
-    addLogEntry('error', 'Batch error: ' + data.error);
+  if (state.batchState.complete) {
+    addLogEntry('success', 'Batch complete: ' + state.batchState.sent + ' messages sent');
+  } else if (state.batchState.error) {
+    addLogEntry('error', 'Batch error: ' + state.batchState.error);
   }
 });
 
@@ -460,12 +478,113 @@ document.getElementById('send-message').addEventListener('input', function () {
 
   // Also emit to server for proper SMPP encoding
   socket.emit('encoding:detect', { message: text });
+
+  // Trigger split preview
+  triggerSplitPreview();
 });
 
 socket.on('smpp:event', function (data) {
   if (!data) return;
   addLogEntry(data.type || 'info', data.message || data.msg || 'SMPP event');
 });
+
+// ── Split Preview ─────────────────────────────────────────────
+socket.on('message:split_preview', function (data) {
+  updateSplitPreview(data);
+});
+
+// ── Encoding detection response from server ──────────────────────
+socket.on('encoding:detected', function (data) {
+  if (!data) return;
+  // Update UI with server's SMPP-accurate encoding info
+  var encInfo = document.getElementById('encoding-info');
+  if (encInfo) {
+    encInfo.textContent = data.encoding + (data.reason ? ' (' + data.reason + ')' : '');
+    encInfo.className = 'encoding-info active';
+    var borderColor = data.data_coding === 8 ? 'rgba(255,187,0,0.3)' : 'rgba(0,255,255,0.3)';
+    var textColor = data.data_coding === 8 ? '#ffbb00' : '#00ffff';
+    encInfo.style.borderColor = borderColor;
+    encInfo.style.color = textColor;
+    encInfo.style.background = data.data_coding === 8 ? 'rgba(255,187,0,0.08)' : 'rgba(0,255,255,0.08)';
+  }
+});
+
+// ── Incoming message list (historical) ───────────────────────────
+socket.on('message:incoming_list', function (data) {
+  if (data && Array.isArray(data.messages)) {
+    state.incomingMessages = data.messages;
+    renderIncomingMessages();
+  }
+});
+
+// ── DLR list (historical) ────────────────────────────────────────
+socket.on('message:dlr_list', function (data) {
+  if (data && Array.isArray(data.reports)) {
+    state.deliveryReports = data.reports;
+    renderDeliveryReports();
+  }
+});
+
+// =============================================================================
+// Update Functions
+// =============================================================================
+
+function updateSplitPreview(splitInfo) {
+  const previewDiv = document.getElementById('split-preview');
+  const manualContainer = document.getElementById('manual-segments-container');
+  if (!previewDiv) return;
+
+  if (!splitInfo || splitInfo.error) {
+    previewDiv.className = 'split-preview error';
+    previewDiv.style.display = 'block';
+    previewDiv.innerHTML = '<span>✗ ' + escapeHtml(splitInfo ? splitInfo.error : 'No preview') + '</span>';
+    return;
+  }
+
+  previewDiv.style.display = 'block';
+
+  if (splitInfo.segments <= 1) {
+    previewDiv.className = 'split-preview info';
+    previewDiv.innerHTML = '<span>✓ Fits in 1 segment (' + splitInfo.totalChars + '/' + splitInfo.maxPerSegment + ' chars)</span>';
+  } else {
+    previewDiv.className = 'split-preview warning';
+    var details = '';
+    if (splitInfo.segmentDetails) {
+      var badges = '';
+      for (var i = 0; i < splitInfo.segmentDetails.length; i++) {
+        badges += '<span class="segment-badge">Seg ' + splitInfo.segmentDetails[i].num + ': ' + splitInfo.segmentDetails[i].length + ' chars</span>';
+      }
+      details = '<div class="segment-details">' + badges + '</div>';
+    }
+    previewDiv.innerHTML = '<span>⚠ Splits into ' + splitInfo.segments + ' segments (' + splitInfo.totalChars + ' chars)</span>' + details;
+  }
+
+  // Show/hide manual segments container
+  var splitMode = document.getElementById('override-split-mode');
+  if (manualContainer && splitMode) {
+    manualContainer.style.display = splitMode.value === 'manual' ? 'block' : 'none';
+  }
+}
+
+function triggerSplitPreview() {
+  var message = document.getElementById('send-message');
+  if (!message || !message.value) {
+    var previewDiv = document.getElementById('split-preview');
+    if (previewDiv) previewDiv.style.display = 'none';
+    return;
+  }
+  var dataCoding = document.getElementById('def-data-coding');
+  var maxSegments = document.getElementById('override-max-segments');
+  var splitMode = document.getElementById('override-split-mode');
+  var udhFormat = document.getElementById('override-udh-format');
+  socket.emit('message:split_preview', {
+    message: message.value,
+    data_coding: dataCoding ? parseInt(dataCoding.value) : 0,
+    max_segments: maxSegments ? parseInt(maxSegments.value) || 10 : 10,
+    split_mode: splitMode ? splitMode.value : 'auto',
+    udh_format: udhFormat ? udhFormat.value : '8bit'
+  });
+}
 
 // =============================================================================
 // Stats Display Update
@@ -519,13 +638,18 @@ function gatherDefaultsValues() {
     'def-esm-class': 'esm_class',
     'def-protocol-id': 'protocol_id',
     'def-replace-if-present': 'replace_if_present_flag',
-    'def-sm-default-msg': 'sm_default_msg_id'
+    'def-sm-default-msg': 'sm_default_msg_id',
+    'def-message-class': 'message_class'
   };
   const data = {};
   for (const [elId, key] of Object.entries(fieldMappings)) {
     const el = document.getElementById(elId);
     if (el) {
-      data[key] = el.value;
+      if (el.type === 'checkbox') {
+        data[key] = el.checked ? 1 : 0;
+      } else {
+        data[key] = el.value;
+      }
     }
   }
   return data;
@@ -533,16 +657,14 @@ function gatherDefaultsValues() {
 
 function gatherOverrideValues() {
   const fieldMappings = {
-    'source-addr': 'source_addr',
-    'source-ton': 'source_addr_ton',
-    'source-npi': 'source_addr_npi',
-    'data-coding': 'data_coding',
-    'message-class': 'message_class'
+    'split-mode': 'split_mode',
+    'max-segments': 'max_segments',
+    'udh-format': 'udh_format'
   };
   const data = {};
   for (const [elSuffix, key] of Object.entries(fieldMappings)) {
     const el = document.getElementById('override-' + elSuffix);
-    if (el) {
+    if (el && el.value.trim() !== '') {
       data[key] = el.value;
     }
   }
@@ -571,7 +693,8 @@ const defaultInputIds = [
   'def-dest-ton', 'def-dest-npi', 'def-service-type',
   'def-priority', 'def-registered-delivery', 'def-data-coding',
   'def-validity', 'def-schedule', 'def-esm-class',
-  'def-protocol-id', 'def-replace-if-present', 'def-sm-default-msg'
+  'def-protocol-id', 'def-replace-if-present', 'def-sm-default-msg',
+  'def-message-class'
 ];
 for (const id of defaultInputIds) {
   const el = document.getElementById(id);
@@ -678,14 +801,6 @@ document.getElementById('btn-cancel').onclick = function () {
 // --- Cancel-by Switch (single handler: addEventListener preferred for mobile) ---
 document.getElementById('cancel-by').onchange = null;
 
-// --- Real-time encoding detection (also fires on mobile via input/keyup) ---
-var sendMsgEl = document.getElementById('send-message');
-if (sendMsgEl) {
-  sendMsgEl.addEventListener('input', function() { socket.emit('encoding:detect', { text: this.value }); });
-  sendMsgEl.addEventListener('keyup', function() { socket.emit('encoding:detect', { text: this.value }); });
-  sendMsgEl.addEventListener('change', function() { socket.emit('encoding:detect', { text: this.value }); });
-}
-
 // --- Other UI handlers wrapped in DOMContentLoaded for safety ---
 document.addEventListener('DOMContentLoaded', function() {
   // Override Toggle
@@ -724,15 +839,59 @@ document.addEventListener('DOMContentLoaded', function() {
       if (srcGroup) srcGroup.classList.add('hidden');
     } else if (by === 'source_dest') {
       if (msgGroup) msgGroup.classList.add('hidden');
-      if (srcGroup) srcGroup.classList.remove('hidden');
+    if (srcGroup) srcGroup.classList.remove('hidden');
     }
   });
+
+  // --- Enable/disable fields based on split mode ---
+  function updateSplitModeFields() {
+    var sm = document.getElementById('override-split-mode');
+    var maxSeg = document.getElementById('override-max-segments');
+    var udhFmt = document.getElementById('override-udh-format');
+    if (!sm) return;
+    var val = sm.value;
+    var showMaxSeg = (val === 'auto' || val === 'sar');
+    var showUdhFmt = (val === 'auto');
+    if (maxSeg) {
+      maxSeg.disabled = !showMaxSeg;
+      maxSeg.parentElement.classList.toggle('field-disabled', !showMaxSeg);
+    }
+    if (udhFmt) {
+      udhFmt.disabled = !showUdhFmt;
+      udhFmt.parentElement.classList.toggle('field-disabled', !showUdhFmt);
+    }
+  }
+
+  // --- Split Mode Change ---
+  var sm = document.getElementById('override-split-mode');
+  if (sm) sm.addEventListener('change', function() {
+    var mc = document.getElementById('manual-segments-container');
+    if (mc) mc.style.display = this.value === 'manual' ? 'block' : 'none';
+    updateSplitModeFields();
+    triggerSplitPreview();
+  });
+  // Run on page load to set initial state
+  updateSplitModeFields();
+  var maxSeg = document.getElementById('override-max-segments');
+  if (maxSeg) maxSeg.addEventListener('change', triggerSplitPreview);
+  var udhFmt = document.getElementById('override-udh-format');
+  if (udhFmt) udhFmt.addEventListener('change', triggerSplitPreview);
+  var ovrDc = document.getElementById('def-data-coding');
+  if (ovrDc) ovrDc.addEventListener('change', triggerSplitPreview);
 });
+
+// =============================================================================
+// Updates
+// =============================================================================
+
+// --- We removed the duplicate split-preview/encoding listeners and consolidated
+//     them into the main send-message input handler at line 418. ---
 
 // --- Clear Log ---
 document.getElementById('btn-clear-log').addEventListener('click', function () {
   state.logs = [];
   renderLogs();
+  addLogEntry('info', 'Event log cleared');
 });
 
 // --- Clear Inbox ---
@@ -754,6 +913,8 @@ document.getElementById('btn-clear-dlr').addEventListener('click', function () {
 // =============================================================================
 document.addEventListener('DOMContentLoaded', function () {
   socket.emit('config:get_defaults');
+  socket.emit('inbox:get');
+  socket.emit('dlr:get');
   // Set destination mode initial visibility
   const destMode = document.getElementById('send-destination-mode');
   if (destMode) {

@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>SMPP v3.4 Web Client</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=2.0.0-fix43">
 </head>
 <body>
   <div class="container">
@@ -42,21 +42,21 @@
             <div class="form-row">
               <div class="form-group">
                 <label>Host</label>
-                <input type="text" id="smsc-host" value="127.0.0.1" placeholder="SMSC hostname or IP">
+                <input type="text" id="smsc-host" value="192.168.192.75" placeholder="SMSC hostname or IP">
               </div>
               <div class="form-group" style="max-width:100px;">
                 <label>Port</label>
-                <input type="number" id="smsc-port" value="2775" placeholder="2775">
+                <input type="number" id="smsc-port" value="9500" placeholder="2775">
               </div>
             </div>
             <div class="form-row">
               <div class="form-group">
                 <label>System ID</label>
-                <input type="text" id="smsc-system-id" placeholder="Username">
+                <input type="text" id="smsc-system-id" value="ooredoo_test" placeholder="Username">
               </div>
               <div class="form-group">
                 <label>Password</label>
-                <input type="password" id="smsc-password" placeholder="Password">
+                <input type="password" id="smsc-password" value="ooredoo" placeholder="Password">
               </div>
             </div>
             <div class="form-row">
@@ -96,9 +96,9 @@
                 <label>Source TON</label>
                 <select id="def-source-ton">
                   <option value="0">Unknown</option>
-                  <option value="1" selected>International</option>
+                  <option value="1">International</option>
                   <option value="2">National</option>
-                  <option value="5">Alphanumeric</option>
+                  <option value="5" selected>Alphanumeric</option>
                 </select>
               </div>
             </div>
@@ -106,8 +106,8 @@
               <div class="form-group">
                 <label>Source NPI</label>
                 <select id="def-source-npi">
-                  <option value="0">Unknown</option>
-                  <option value="1" selected>ISDN (E.164)</option>
+                  <option value="0" selected>Unknown</option>
+                  <option value="1">ISDN (E.164)</option>
                   <option value="3">Data (X.121)</option>
                   <option value="6">Land Mobile</option>
                   <option value="8">National</option>
@@ -163,6 +163,15 @@
               <div class="form-group" style="flex-direction:row;align-items:center;gap:8px;">
                 <label style="margin-bottom:0;">Request DLR</label>
                 <input type="checkbox" id="def-registered-delivery" checked>
+              </div>
+              <div class="form-group">
+                <label>Message Class</label>
+                <select id="def-message-class">
+                  <option value="1">Normal</option>
+                  <option value="0">Flash</option>
+                  <option value="2">SIM</option>
+                  <option value="3">TE</option>
+                </select>
               </div>
               <div class="form-group">
                 <label>Validity</label>
@@ -257,43 +266,38 @@
             <div class="encoding-info" id="encoding-info"></div>
 
             <div class="override-toggle" id="override-toggle">
-              <span>▶</span> Override Section
+              <span>▶</span> Split Mode
             </div>
             <div class="override-section" id="override-section">
-              <div class="form-row">
-                <div class="form-group">
-                  <label>Source Addr</label>
-                  <input type="text" id="override-source-addr">
+              <div class="split-config">
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Split Mode</label>
+                    <select id="override-split-mode">
+                      <option value="none" selected>No Split (message_payload)</option>
+                      <option value="auto">UDH</option>
+                      <option value="sar">SAR (Segment Allocation Ref)</option>
+                      <option value="manual">Manual Split</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label>Max Segments</label>
+                    <input type="number" id="override-max-segments" value="10" min="1" max="255">
+                  </div>
+                  <div class="form-group">
+                    <label>UDH Format</label>
+                    <select id="override-udh-format">
+                      <option value="8bit">8-bit</option>
+                      <option value="16bit">16-bit</option>
+                    </select>
+                  </div>
                 </div>
-                <div class="form-group">
-                  <label>Source TON</label>
-                  <select id="override-source-ton">
-                    <option value="0">Unknown</option>
-                    <option value="1">International</option>
-                    <option value="2">National</option>
-                    <option value="5">Alphanumeric</option>
-                  </select>
-                </div>
-              </div>
-              <div class="form-row">
-                <div class="form-group">
-                  <label>Data Coding</label>
-                  <select id="override-data-coding">
-                    <option value="0">GSM-7</option>
-                    <option value="1">ASCII</option>
-                    <option value="3">Latin-1</option>
-                    <option value="4">Binary</option>
-                    <option value="8">UCS-2</option>
-                  </select>
-                </div>
-                <div class="form-group">
-                  <label>Message Class</label>
-                  <select id="override-message-class">
-                    <option value="1">Normal</option>
-                    <option value="0">Flash</option>
-                    <option value="2">SIM</option>
-                    <option value="3">TE</option>
-                  </select>
+                <div id="split-preview" class="split-preview" style="display:none;"></div>
+                <div id="manual-segments-container" style="display:none;">
+                  <div class="form-group">
+                    <label>Manual Segments (one per line):</label>
+                    <textarea id="manual-segments" rows="3" placeholder="Segment 1 text&#10;Segment 2 text&#10;Segment 3 text"></textarea>
+                  </div>
                 </div>
               </div>
             </div>
@@ -432,12 +436,14 @@
                 <thead><tr>
                   <th>Time</th>
                   <th>Message ID</th>
-                  <th>Destination</th>
+                  <th>Source</th>
+                  <th>Dest</th>
                   <th>Status</th>
-                  <th>Done</th>
+                  <th>Sub</th>
+                  <th>Del</th>
                 </tr></thead>
                 <tbody id="dlr-entries-tbody">
-                  <tr><td colspan="5"><div class="empty-state">No delivery reports</div></td></tr>
+                  <tr><td colspan="7"><div class="empty-state">No delivery reports</div></td></tr>
                 </tbody>
               </table>
             </div>
@@ -467,6 +473,6 @@
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="app.js?v=2.0.0-fix4"></script>
+    <script src="app.js?v=2.0.0-fix59"></script>
 </body>
 </html>
