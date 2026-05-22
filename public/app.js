@@ -337,9 +337,9 @@ function renderBatchProgress() {
   }
 
   // ── Log to Event Log only (info events) ──────────────────────────────────
-  function logThroughputEvent(type, msg) {
-    var logMsg = '[THROUGHPUT] ' + type + ': ' + msg;
-    if (window.addLogEntry) window.addLogEntry(logMsg, 'info');
+  function logThroughputEvent(label, msg) {
+    var logMsg = '[THROUGHPUT] ' + label + ': ' + msg;
+    addLogEntry('info', logMsg);
   }
 
   // ── Log to Event Log + error summary (actual SMSC errors) ────────────────
@@ -357,7 +357,7 @@ function renderBatchProgress() {
       }
     }
     var logMsg = '[THROUGHPUT] ' + type + (code ? ' (' + code + ')' : '') + ': ' + msg;
-    if (window.addLogEntry) window.addLogEntry(logMsg, 'error');
+    addLogEntry('error', logMsg);
   }
 
   function updProg(d) {
@@ -418,8 +418,8 @@ function renderBatchProgress() {
       if (progressArea) progressArea.style.display = 'block';
       if (tgtRateSpan)  tgtRateSpan.textContent = String(rate);
       startBtn.disabled = true;
-      pauseBtn.disabled = false;
-      stopBtn.disabled  = false;
+      // Don't enable pause/stop yet — wait for throughput:started event
+      // (activeJobId is null until then, and pause/stop send it as {jobId: null})
       if (statusText) statusText.textContent = 'Starting...';
 
       if (typeof socket !== 'undefined') {
@@ -463,6 +463,8 @@ function renderBatchProgress() {
     socket.on('throughput:started', function(d) {
       activeJobId = d.jobId;
       if (statusText) statusText.textContent = '▶ Running';
+      pauseBtn.disabled = false;
+      stopBtn.disabled  = false;
       logThroughputEvent('Job Started', 'Job ' + d.jobId + ' — Rate: ' + d.rate + ' msg/s, Total: ' + d.totalCount);
     });
     socket.on('throughput:progress', function(d) { updProg(d); });
