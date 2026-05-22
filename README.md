@@ -45,11 +45,10 @@ _* No Split with >254 bytes uses `message_payload` TLV — SMSC support required
 - **Manual override** via defaults panel (set data_coding to 1, 3, or 8 to force encoding)
 
 ### Throughput Sender
-- **Rate-controlled burst sending** — set rate from 1–100 msg/s
+- **Rate-controlled burst sending** — set rate from 1–1000 msg/s
 - **Total count expansion** — repeats destinations cyclically to hit exact count
-- **Per-second rate limiting** — maintains constant rate (no auto-reduction)
-- **Auto-pause on throttling** — pauses after 10 consecutive ESME_RTHROTTLED errors
-- **Smart retry** — re-queues throttled messages; non-throttle errors fail immediately
+- **Per-second rate limiting** — maintains constant rate with recursive setTimeout (no auto-reduction)
+- **Auto-pause on throttling** — pauses after 10 consecutive ESME_RTHROTTLED errors (no automatic retry)
 - **Pause / Resume / Stop** — full job lifecycle control
 - **Real-time progress** — sent/failed counters, ETA, target rate display
 - **Error summary** — lists real SMSC errors (invalid dest, auth, etc.) in a collapsible panel
@@ -219,9 +218,9 @@ WantedBy=multi-user.target
 | `smsc:status` | `{state, host?, port?, bindMode?, connected_since?}` | Connection state change |
 | `config:defaults` | `{source_addr, data_coding, ...}` | Current defaults |
 | `message:sent` | `{message_id, destination, segment?, total_segments?}` | Submit success |
-| `message:error` | `{message, destination?}` | Submit failure |
-| `message:replaced` | `{success, original_message_id, ...}` | Replace result |
-| `message:cancelled` | `{success, message_id, ...}` | Cancel result |
+| `message:error` | `{source: 'send'|'replace'|'cancel', message, message_id?, destination?, timestamp}` | Submit / replace / cancel failure |
+| `message:replaced` | `{message_id, timestamp}` | Replace result |
+| `message:cancelled` | `{message_id, source_addr?, destination_addr?, cancel_by?, timestamp}` | Cancel result |
 | `message:incoming` | `{source_addr, destination_addr, short_message, ...}` | P2A/MO SMS |
 | `message:dlr` | `{message_id, status, done_date, stat, ...}` | Delivery receipt |
 | `smpp:event` | `{type, message, pdu?}` | Protocol log event |
@@ -305,8 +304,8 @@ Then connect from the web UI at `localhost:2775` with any credentials.
 | `test-ws-quick.js` | Quick WebSocket connectivity test |
 
 ```bash
-npm test                # Run all tests
-node test-e2e.js        # Single test suite
+node smsc-simulator.js  # Terminal 1: start simulator
+node test-e2e.js        # Terminal 2: run test suite
 ```
 
 ## Technical Notes
