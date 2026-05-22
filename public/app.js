@@ -628,10 +628,15 @@ socket.on('config:defaults', function (data) {
 
 // ── Catch message errors from the backend (e.g. not connected, invalid params) ──
 socket.on('message:error', function (data) {
-  const errMsg = data && data.message ? data.message : 'Unknown send error';
-  addLogEntry('error', 'Send failed: ' + errMsg);
-  state.stats.messagesFailed++;
-  updateStatsDisplay();
+  var prefix = 'Send failed';
+  if (data && data.source === 'replace') prefix = 'Replace failed';
+  else if (data && data.source === 'cancel') prefix = 'Cancel failed';
+  var errMsg = data && data.message ? data.message : 'Unknown error';
+  addLogEntry('error', prefix + ': ' + errMsg);
+  if (!data || (data.source !== 'replace' && data.source !== 'cancel')) {
+    state.stats.messagesFailed++;
+    updateStatsDisplay();
+  }
 });
 
 socket.on('message:sent', function (data) {
@@ -645,7 +650,13 @@ socket.on('message:replaced', function (data) {
 });
 
 socket.on('message:cancelled', function (data) {
-  addLogEntry('warning', 'Message cancelled: ' + (data && data.message_id ? data.message_id : 'unknown'));
+  var label = 'unknown';
+  if (data && data.message_id) {
+    label = data.message_id;
+  } else if (data && data.source_addr && data.destination_addr) {
+    label = data.source_addr + ' → ' + data.destination_addr;
+  }
+  addLogEntry('warning', 'Message cancelled: ' + label);
 });
 
 socket.on('message:incoming', function (data) {
@@ -1041,52 +1052,58 @@ document.getElementById('btn-send').onclick = function () {
 };
 
 // --- Replace Button ---
-document.getElementById('btn-replace').onclick = function () {
-  const msgIdEl = document.getElementById('replace-message-id');
-  const srcEl = document.getElementById('replace-source-addr');
-  const destEl = document.getElementById('replace-destination-addr');
-  const msgEl = document.getElementById('replace-message');
-  const data = {};
-  if (msgIdEl) data.message_id = msgIdEl.value;
-  if (srcEl) data.source_addr = srcEl.value;
-  if (destEl) data.destination_addr = destEl.value;
-  if (msgEl) data.short_message = msgEl.value;
-  if (!data.message_id) {
-    addLogEntry('error', 'Please enter a message ID to replace');
-    return;
-  }
-  socket.emit('message:replace', data);
-};
+(function() {
+  var btn = document.getElementById('btn-replace');
+  if (btn) btn.addEventListener('click', function () {
+    var msgIdEl = document.getElementById('replace-message-id');
+    var srcEl = document.getElementById('replace-source-addr');
+    var msgEl = document.getElementById('replace-message');
+    var data = {};
+    if (msgIdEl) data.message_id = msgIdEl.value;
+    if (srcEl) data.source_addr = srcEl.value;
+    if (msgEl) data.short_message = msgEl.value;
+    if (!data.message_id) {
+      addLogEntry('error', 'Please enter a message ID to replace');
+      return;
+    }
+    if (!data.short_message) {
+      addLogEntry('error', 'Please enter replacement message content');
+      return;
+    }
+    socket.emit('message:replace', data);
+  });
+})();
 
 // --- Cancel Button ---
-document.getElementById('btn-cancel').onclick = function () {
-  const cancelBy = document.getElementById('cancel-by');
-  const by = cancelBy ? cancelBy.value : 'message_id';
-  const data = {
-    cancel_by: by
-  };
-  if (by === 'message_id') {
-    const msgIdEl = document.getElementById('cancel-message-id');
-    data.message_id = msgIdEl ? msgIdEl.value : '';
-    if (!data.message_id) {
-      addLogEntry('error', 'Please enter a message ID to cancel');
-      return;
+(function() {
+  var btn = document.getElementById('btn-cancel');
+  if (btn) btn.addEventListener('click', function () {
+    var cancelBy = document.getElementById('cancel-by');
+    var by = cancelBy ? cancelBy.value : 'message_id';
+    var data = { cancel_by: by };
+    if (by === 'message_id') {
+      var msgIdEl = document.getElementById('cancel-message-id');
+      data.message_id = msgIdEl ? msgIdEl.value : '';
+      if (!data.message_id) {
+        addLogEntry('error', 'Please enter a message ID to cancel');
+        return;
+      }
+    } else if (by === 'source_dest') {
+      var srcEl = document.getElementById('cancel-source-addr');
+      var destEl = document.getElementById('cancel-destination-addr');
+      data.source_addr = srcEl ? srcEl.value : '';
+      data.destination_addr = destEl ? destEl.value : '';
+      if (!data.source_addr || !data.destination_addr) {
+        addLogEntry('error', 'Please enter both source and destination addresses');
+        return;
+      }
     }
-  } else if (by === 'source_dest') {
-    const srcEl = document.getElementById('cancel-source-addr');
-    const destEl = document.getElementById('cancel-destination-addr');
-    data.source_addr = srcEl ? srcEl.value : '';
-    data.destination_addr = destEl ? destEl.value : '';
-    if (!data.source_addr || !data.destination_addr) {
-      addLogEntry('error', 'Please enter both source and destination addresses');
-      return;
-    }
-  }
-  socket.emit('message:cancel', data);
-};
+    socket.emit('message:cancel', data);
+  });
+})();
 
-// --- Cancel-by Switch (single handler: addEventListener preferred for mobile) ---
-document.getElementById('cancel-by').onchange = null;
+// --- Cancel-by is handled via addEventListener in DOMContentLoaded (below) ---
+// (No .onchange assignment needed)
 
 // --- Other UI handlers wrapped in DOMContentLoaded for safety ---
 document.addEventListener('DOMContentLoaded', function() {
