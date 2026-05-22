@@ -161,7 +161,10 @@ const smppManager = new SmppManager();
 // WebSocket Handler — M3
 // =============================================================================
 const WebSocketHandler = require('./lib/websocket-handler');
+const ThroughputManager = require('./lib/throughput-manager');
+const throughputManager = new ThroughputManager();
 const wsHandler = new WebSocketHandler(io, smppManager, sessionState);
+wsHandler.setThroughputManager(throughputManager);
 wsHandler.initialize();
 
 // ---------------------------------------------------------------------------

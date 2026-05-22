@@ -6,3 +6,4 @@ npm-debug.log*
 test-*.js
 test-*.sh
 smsc-simulator/
+.project-context.md

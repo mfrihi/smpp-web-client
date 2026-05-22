@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>SMPP v3.4 Web Client</title>
-  <link rel="stylesheet" href="style.css?v=2.0.0-fix43">
+  <link rel="stylesheet" href="style.css?v=2.1.0-throughput">
 </head>
 <body>
   <div class="container">
@@ -314,6 +314,80 @@
               <div class="progress-text" id="batch-progress-text">Sending...</div>
               <div class="progress-text" id="batch-status"></div>
             </div>
+
+            <!-- Send with Throughput - Collapsible Section -->
+            <div class="throughput-container">
+              <button type="button" id="throughput-toggle-btn" class="btn-throughput-toggle">
+                <span class="toggle-icon">⏱️</span> Send with Throughput
+                <span class="throughput-badge">rate limited</span>
+              </button>
+
+              <div id="throughput-section" class="throughput-collapsible" style="display: none;">
+                <!-- Rate Control -->
+                <div class="throughput-controls-row">
+                  <div class="throughput-field">
+                    <label>📊 Target Rate</label>
+                    <div class="rate-input">
+                      <input type="number" id="throughput-rate" value="10" min="1" max="100" step="1">
+                      <span>SMS/sec</span>
+                    </div>
+                    <small class="field-hint">Max 100 msg/s</small>
+                  </div>
+                  <div class="throughput-field">
+                    <label>🎯 Total to Send</label>
+                    <div class="rate-input">
+                      <input type="number" id="throughput-total" value="100" min="1" max="100000" step="1">
+                      <span>SMS total</span>
+                    </div>
+                  </div>
+                  <div class="throughput-field">
+                    <label>🔄 Retry on Throttle</label>
+                    <div class="rate-input">
+                      <input type="number" id="throughput-max-retries" value="3" min="0" max="10" step="1">
+                      <span>max retries</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="throughput-action-buttons">
+                  <button id="throughput-start" class="btn-throughput-start">▶ START</button>
+                  <button id="throughput-pause" class="btn-throughput-pause" disabled>⏸ PAUSE</button>
+                  <button id="throughput-stop" class="btn-throughput-stop" disabled>⏹ STOP</button>
+                </div>
+
+                <!-- Progress Area -->
+                <div id="throughput-progress-area" class="throughput-progress-area" style="display: none;">
+                  <div class="progress-bar-wrapper">
+                    <div class="progress-bar-bg">
+                      <div id="throughput-progress-fill" class="progress-bar-fill-throughput" style="width: 0%"></div>
+                    </div>
+                    <span id="throughput-percentage" class="progress-percentage">0%</span>
+                  </div>
+                  <div class="progress-stats-throughput">
+                    <span>📤 Sent: <span id="throughput-sent">0</span></span>
+                    <span>❌ Failed: <span id="throughput-failed">0</span></span>
+                    <span>🔄 Retries: <span id="throughput-retries">0</span></span>
+                    <span>⚡ Current Rate: <span id="throughput-current-rate">0</span> msg/s</span>
+                    <span>🎯 Target Rate: <span id="throughput-target-rate-display">10</span> msg/s</span>
+                    <span>⏱️ ETA: <span id="throughput-eta">--:--</span></span>
+                  </div>
+                  <div class="progress-status">
+                    <span class="status-label">Status:</span>
+                    <span id="throughput-status-text" class="status-value">Idle</span>
+                    <span id="throughput-throttle-warning" class="throttle-warning" style="display: none;">
+                      ⚠️ SMSC throttling detected — rate reduced
+                    </span>
+                  </div>
+                </div>
+
+                <!-- Error Summary -->
+                <div id="throughput-error-summary" class="throughput-error-summary" style="display: none;">
+                  <div class="error-header">⚠️ Recent SMSC Errors:</div>
+                  <div id="throughput-error-list" class="error-list"></div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -473,6 +547,6 @@
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
-    <script src="app.js?v=2.0.0-fix59"></script>
+    <script src="app.js?v=2.1.0-throughput"></script>
 </body>
 </html>

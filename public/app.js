@@ -256,6 +256,259 @@ function renderBatchProgress() {
 }
 
 // =============================================================================
+// Throughput Sender - Frontend Logic
+// =============================================================================
+
+(function() {
+  'use strict';
+
+  var toggleBtn    = document.getElementById('throughput-toggle-btn');
+  var section      = document.getElementById('throughput-section');
+  var startBtn     = document.getElementById('throughput-start');
+  var pauseBtn     = document.getElementById('throughput-pause');
+  var stopBtn      = document.getElementById('throughput-stop');
+  var rateInput    = document.getElementById('throughput-rate');
+  var totalInput   = document.getElementById('throughput-total');
+  var maxRetriesIn = document.getElementById('throughput-max-retries');
+  var progressArea = document.getElementById('throughput-progress-area');
+  var fillBar      = document.getElementById('throughput-progress-fill');
+  var pctSpan      = document.getElementById('throughput-percentage');
+  var sentSpan     = document.getElementById('throughput-sent');
+  var failedSpan   = document.getElementById('throughput-failed');
+  var retriesSpan  = document.getElementById('throughput-retries');
+  var currRateSpan = document.getElementById('throughput-current-rate');
+  var tgtRateSpan  = document.getElementById('throughput-target-rate-display');
+  var etaSpan      = document.getElementById('throughput-eta');
+  var statusText   = document.getElementById('throughput-status-text');
+  var throttleWarn = document.getElementById('throughput-throttle-warning');
+  var errorSummary = document.getElementById('throughput-error-summary');
+  var errorList    = document.getElementById('throughput-error-list');
+  var activeJobId  = null;
+  var lastErrors   = [];
+
+  if (toggleBtn) {
+    toggleBtn.addEventListener('click', function() {
+      var open = section.style.display === 'block';
+      section.style.display = open ? 'none' : 'block';
+      toggleBtn.classList.toggle('open', !open);
+    });
+  }
+
+  function getDest() {
+    var mode = document.getElementById('send-destination-mode');
+    var mv = mode ? mode.value : 'single';
+    if (mv === 'single') {
+      var el = document.getElementById('send-destination');
+      return el && el.value.trim() ? [el.value.trim()] : [];
+    }
+    var el = document.getElementById('send-destinations');
+    return el && el.value.trim() ? el.value.split('\n').map(function(d){ return d.trim(); }).filter(Boolean) : [];
+  }
+
+  function getMsg() {
+    var el = document.getElementById('send-message');
+    return el ? el.value : '';
+  }
+
+  function getOverrides() {
+    function v(id) { var e=document.getElementById(id); return e ? e.value : ''; }
+    var o = {};
+    var sa = v('def-source-addr'); if (sa) o.source_addr = sa;
+    o.source_addr_ton = parseInt(v('def-source-ton')) || 1;
+    o.source_addr_npi = parseInt(v('def-source-npi')) || 1;
+    o.dest_addr_ton   = parseInt(v('def-dest-ton')) || 1;
+    o.dest_addr_npi   = parseInt(v('def-dest-npi')) || 1;
+    o.data_coding     = parseInt(v('def-data-coding')) || 0;
+    o.priority_flag   = parseInt(v('def-priority')) || 0;
+    var reg = document.getElementById('def-registered-delivery');
+    o.registered_delivery = reg && reg.checked ? 1 : 0;
+    o.message_class   = parseInt(v('def-message-class')) || 1;
+    var svc = v('def-service-type'); if (svc) o.service_type = svc;
+    var sch = v('def-schedule'); if (sch) o.schedule_delivery_time = sch;
+    var vld = v('def-validity'); if (vld) o.validity_period = vld;
+    var esm = v('def-esm-class'); if (esm) o.esm_class = parseInt(esm);
+    var pid = v('def-protocol-id'); if (pid) o.protocol_id = parseInt(pid);
+    var rpf = document.getElementById('def-replace-if-present');
+    o.replace_if_present_flag = rpf && rpf.checked ? 1 : 0;
+    var sm = v('override-split-mode'); if (sm) o.split_mode = sm;
+    o.max_segments = parseInt(v('override-max-segments')) || 10;
+    o.split_udh_format = v('override-udh-format') || '8bit';
+    return o;
+  }
+
+  function pushErr(type, code, msg, dest) {
+    var ts = new Date().toLocaleTimeString();
+    lastErrors.unshift({ ts: ts, type: type, code: code, msg: msg, dest: dest });
+    if (lastErrors.length > 10) lastErrors.pop();
+    if (errorSummary && errorList) {
+      if (lastErrors.length === 0) { errorSummary.style.display = 'none'; }
+      else {
+        errorSummary.style.display = 'block';
+        errorList.innerHTML = lastErrors.slice(0,5).map(function(e) {
+          return '<div>[' + e.ts + '] ' + e.type + ': ' + e.msg + (e.dest ? ' (' + e.dest + ')' : '') + '</div>';
+        }).join('');
+      }
+    }
+    var logMsg = '[THROUGHPUT] ' + type + (code ? ' (' + code + ')' : '') + ': ' + msg;
+    if (window.addLogEntry) window.addLogEntry(logMsg, 'error');
+  }
+
+  function updProg(d) {
+    if (!d) return;
+    var p = d.percentage || 0;
+    if (fillBar)     fillBar.style.width = p + '%';
+    if (pctSpan)     pctSpan.textContent = Math.round(p) + '%';
+    if (sentSpan)    sentSpan.textContent = d.sent || 0;
+    if (failedSpan)  failedSpan.textContent = d.failed || 0;
+    if (retriesSpan) retriesSpan.textContent = d.retryCount || 0;
+    if (currRateSpan) currRateSpan.textContent = d.currentRate || 0;
+    if (etaSpan)     etaSpan.textContent = d.eta || '--:--';
+    if (statusText) {
+      if (d.status === 'paused')    statusText.textContent = '⏸ Paused';
+      else if (d.status === 'completed') statusText.textContent = '✅ Completed';
+      else if (d.status === 'stopped')   statusText.textContent = '⏹ Stopped';
+      else if (d.status === 'running')   statusText.textContent = '▶ Running';
+    }
+  }
+
+  function resetUI() {
+    if (fillBar)     fillBar.style.width = '0%';
+    if (pctSpan)     pctSpan.textContent = '0%';
+    if (sentSpan)    sentSpan.textContent = '0';
+    if (failedSpan)  failedSpan.textContent = '0';
+    if (retriesSpan) retriesSpan.textContent = '0';
+    if (currRateSpan) currRateSpan.textContent = '0';
+    if (etaSpan)     etaSpan.textContent = '--:--';
+    if (statusText)  statusText.textContent = 'Idle';
+    if (progressArea) progressArea.style.display = 'none';
+    if (errorSummary) errorSummary.style.display = 'none';
+    if (throttleWarn) throttleWarn.style.display = 'none';
+    lastErrors = [];
+  }
+
+  if (startBtn) {
+    startBtn.addEventListener('click', function() {
+      // If there's an active paused job, resume it instead of creating new
+      if (activeJobId && typeof socket !== 'undefined') {
+        socket.emit('throughput:resume', { jobId: activeJobId });
+        if (statusText) statusText.textContent = 'Resuming...';
+        startBtn.disabled = true;
+        pauseBtn.disabled = false;
+        return;
+      }
+
+      var dests = getDest();
+      var msg   = getMsg();
+      var rate  = parseInt(rateInput ? rateInput.value : 10);
+      var total = parseInt(totalInput ? totalInput.value : 100);
+      var retry = parseInt(maxRetriesIn ? maxRetriesIn.value : 3);
+
+      if (!dests.length) { pushErr('Validation', null, 'No destination(s)'); return; }
+      if (!msg.trim())   { pushErr('Validation', null, 'Message empty'); return; }
+      if (rate < 1 || rate > 100) { pushErr('Validation', null, 'Rate must be 1-100'); return; }
+      if (total < 1 || total > 100000) { pushErr('Validation', null, 'Total must be 1-100000'); return; }
+
+      if (progressArea) progressArea.style.display = 'block';
+      if (tgtRateSpan)  tgtRateSpan.textContent = String(rate);
+      startBtn.disabled = true;
+      pauseBtn.disabled = false;
+      stopBtn.disabled  = false;
+      if (statusText) statusText.textContent = 'Starting...';
+
+      if (typeof socket !== 'undefined') {
+        socket.emit('throughput:start', {
+          destinations: dests,
+          message: msg,
+          ratePerSecond: rate,
+          totalCount: total,
+          maxRetries: retry,
+          overrides: getOverrides(),
+        });
+      }
+    });
+  }
+
+  if (pauseBtn) {
+    pauseBtn.addEventListener('click', function() {
+      if (activeJobId && typeof socket !== 'undefined') {
+        socket.emit('throughput:pause', { jobId: activeJobId });
+        if (statusText) statusText.textContent = 'Pausing...';
+      }
+    });
+  }
+
+  if (stopBtn) {
+    stopBtn.addEventListener('click', function() {
+      if (activeJobId && typeof socket !== 'undefined') {
+        socket.emit('throughput:stop', { jobId: activeJobId });
+        if (statusText) statusText.textContent = 'Stopping...';
+      }
+      startBtn.disabled = false;
+      pauseBtn.disabled = true;
+      stopBtn.disabled  = true;
+      activeJobId = null;
+    });
+  }
+
+  if (typeof socket !== 'undefined') {
+    socket.on('throughput:started', function(d) {
+      activeJobId = d.jobId;
+      if (statusText) statusText.textContent = '▶ Running';
+      pushErr('Job Started', null, 'Job ' + d.jobId + ' — Rate: ' + d.rate + ' msg/s, Total: ' + d.totalCount);
+    });
+    socket.on('throughput:progress', function(d) { updProg(d); });
+    socket.on('throughput:error', function(d) {
+      pushErr(d.errorName || d.errorType || 'SMSC Error', d.errorCode, d.errorMessage || d.message, d.destination);
+    });
+    socket.on('throughput:paused', function(d) {
+      if (statusText) statusText.textContent = '⏸ Paused';
+      startBtn.disabled = false;
+      pauseBtn.disabled = true;
+      if (d.reason === 'throttle') pushErr('Auto-Paused', null, 'Job paused due to SMSC throttling');
+    });
+    socket.on('throughput:resumed', function(d) {
+      if (statusText) statusText.textContent = '▶ Running';
+      startBtn.disabled = true;
+      pauseBtn.disabled = false;
+      pushErr('Job Resumed', null, 'Rate: ' + d.rate + ' msg/s');
+    });
+    socket.on('throughput:completed', function(d) {
+      if (statusText) statusText.textContent = '✅ Completed';
+      startBtn.disabled = false;
+      pauseBtn.disabled = true;
+      stopBtn.disabled  = true;
+      activeJobId = null;
+      pushErr('Job Completed', null, 'Sent: ' + d.sent + ', Failed: ' + d.failed + ', Duration: ' + d.duration + 's');
+    });
+    socket.on('throughput:rate_updated', function(d) {
+      if (rateInput)  rateInput.value = String(d.newRate);
+      if (tgtRateSpan) tgtRateSpan.textContent = String(d.newRate);
+      if (currRateSpan) currRateSpan.textContent = String(d.newRate);
+      if (throttleWarn) {
+        throttleWarn.style.display = 'inline-block';
+        setTimeout(function() { throttleWarn.style.display = 'none'; }, 5000);
+      }
+    });
+    socket.on('throughput:stopped', function(d) {
+      if (statusText) statusText.textContent = '⏹ Stopped';
+      startBtn.disabled = false;
+      pauseBtn.disabled = true;
+      stopBtn.disabled  = true;
+      activeJobId = null;
+    });
+    socket.on('throughput:retry', function(d) {
+      pushErr('Retry', null, 'Retrying ' + d.destination + ' (' + d.retryCount + '/' + d.maxRetries + ')');
+    });
+    socket.on('throughput:cleanup', function() {
+      startBtn.disabled = false;
+      pauseBtn.disabled = true;
+      stopBtn.disabled  = true;
+      activeJobId = null;
+    });
+  }
+})();
+
+// =============================================================================
 // Socket Event Handlers
 // =============================================================================
 
