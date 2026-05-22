@@ -44,6 +44,16 @@ _* No Split with >254 bytes uses `message_payload` TLV — SMSC support required
 - **UCS-2** (data_coding=8) — triggered by emoji, Arabic script, or any non-GSM-7 character
 - **Manual override** via defaults panel (set data_coding to 1, 3, or 8 to force encoding)
 
+### Throughput Sender
+- **Rate-controlled burst sending** — set rate from 1–100 msg/s
+- **Total count expansion** — repeats destinations cyclically to hit exact count
+- **Per-second rate limiting** — maintains constant rate (no auto-reduction)
+- **Auto-pause on throttling** — pauses after 10 consecutive ESME_RTHROTTLED errors
+- **Smart retry** — re-queues throttled messages; non-throttle errors fail immediately
+- **Pause / Resume / Stop** — full job lifecycle control
+- **Real-time progress** — sent/failed counters, ETA, target rate display
+- **Error summary** — lists real SMSC errors (invalid dest, auth, etc.) in a collapsible panel
+
 ## Architecture
 
 ```
@@ -174,6 +184,7 @@ WantedBy=multi-user.target
 | **Message Defaults** | Persistent defaults: source addr, TON/NPI, data coding, priority, DLR, message class |
 | **Send Message** | Destination MSISDN + message text + character counter + split preview |
 | **Batch Send** | Multiple destinations (newline-separated) + same message |
+| **Throughput Sender** | Rate-controlled burst sending with pause/resume/stop, progress bar, ETA, error summary |
 | **Replace Message** | `replace_sm` by message_id |
 | **Cancel Message** | `cancel_sm` by message_id or source+destination |
 | **Event Log** | Real-time color-coded protocol events (last 1000) |
@@ -194,6 +205,12 @@ WantedBy=multi-user.target
 | `message:replace` | `{message_id, source_addr, new_message}` | Replace queued message |
 | `message:cancel` | `{cancel_by, message_id?, source_addr?, destination_addr?}` | Cancel message |
 | `encoding:detect` | `{text}` | Detect GSM-7 or UCS-2 |
+| `throughput:start` | `{destinations, message, ratePerSecond, totalCount, overrides?}` | Start burst send job |
+| `throughput:pause` | `{jobId}` | Pause running job |
+| `throughput:resume` | `{jobId}` | Resume paused job |
+| `throughput:stop` | `{jobId}` | Stop job immediately |
+| `throughput:update_rate` | `{jobId, newRate}` | Change rate during job |
+| `throughput:status` | `{jobId}` | Get current job status |
 
 ### Server → Client
 
@@ -211,6 +228,14 @@ WantedBy=multi-user.target
 | `encoding:detected` | `{encoding, data_coding, max_chars, reason}` | Encoding detection result |
 | `message:incoming_list` | `{messages: [...]}` | Inbox history (on connect) |
 | `message:dlr_list` | `{reports: [...]}` | DLR history (on connect) |
+| `throughput:started` | `{jobId, totalCount, rate}` | Job started |
+| `throughput:progress` | `{jobId, sent, failed, total, percentage, currentRate, targetRate, eta}` | Job progress update |
+| `throughput:paused` | `{jobId, reason}` | Job paused (user or auto) |
+| `throughput:resumed` | `{jobId, rate}` | Job resumed |
+| `throughput:stopped` | `{jobId, sent, failed}` | Job stopped |
+| `throughput:completed` | `{jobId, sent, failed, total, duration}` | Job completed |
+| `throughput:error` | `{jobId, errorType, errorCode, errorMessage, destination?}` | SMSC error during job |
+| `throughput:rate_updated` | `{jobId, oldRate, newRate}` | Rate changed |
 
 ## SMPP Protocol Support
 

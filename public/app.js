@@ -129,22 +129,22 @@ function renderLogs() {
     // Color-code by type
     switch (entry.type) {
       case 'info':
-        rowClass += ' log-info';
+        rowClass += ' info';
         break;
       case 'warning':
-        rowClass += ' log-warning';
+        rowClass += ' warning';
         break;
       case 'error':
-        rowClass += ' log-error';
+        rowClass += ' error';
         break;
       case 'success':
-        rowClass += ' log-success';
+        rowClass += ' success';
         break;
       case 'debug':
-        rowClass += ' log-debug';
+        rowClass += ' debug';
         break;
       case 'pdu':
-        rowClass += ' log-pdu';
+        rowClass += ' pdu';
         break;
       default:
         break;
@@ -152,7 +152,7 @@ function renderLogs() {
     html += '<div class="' + rowClass + '">';
     html += '<span class="log-time">[' + escapeHtml(time) + ']</span> ';
     html += '<span class="log-type">' + escapeHtml(entry.type.toUpperCase()) + ':</span> ';
-    html += '<span class="log-msg">' + escapeHtml(entry.msg) + '</span>';
+    html += '<span class="log-message">' + escapeHtml(entry.msg) + '</span>';
     if (entry.pdu) {
       html += ' <span class="log-pdu-data">' + escapeHtml(entry.pdu) + '</span>';
     }
@@ -269,13 +269,11 @@ function renderBatchProgress() {
   var stopBtn      = document.getElementById('throughput-stop');
   var rateInput    = document.getElementById('throughput-rate');
   var totalInput   = document.getElementById('throughput-total');
-  var maxRetriesIn = document.getElementById('throughput-max-retries');
   var progressArea = document.getElementById('throughput-progress-area');
   var fillBar      = document.getElementById('throughput-progress-fill');
   var pctSpan      = document.getElementById('throughput-percentage');
   var sentSpan     = document.getElementById('throughput-sent');
   var failedSpan   = document.getElementById('throughput-failed');
-  var retriesSpan  = document.getElementById('throughput-retries');
   var currRateSpan = document.getElementById('throughput-current-rate');
   var tgtRateSpan  = document.getElementById('throughput-target-rate-display');
   var etaSpan      = document.getElementById('throughput-eta');
@@ -285,6 +283,7 @@ function renderBatchProgress() {
   var errorList    = document.getElementById('throughput-error-list');
   var activeJobId  = null;
   var lastErrors   = [];
+  var pendingResume = false;  // Prevents stale pause events from showing after resume
 
   if (toggleBtn) {
     toggleBtn.addEventListener('click', function() {
@@ -342,6 +341,12 @@ function renderBatchProgress() {
     addLogEntry('info', logMsg);
   }
 
+  // ── Log warning events (rate reduction, retries) ─────────────────────────
+  function logThroughputWarning(label, msg) {
+    var logMsg = '[THROUGHPUT] ' + label + ': ' + msg;
+    addLogEntry('warning', logMsg);
+  }
+
   // ── Log to Event Log + error summary (actual SMSC errors) ────────────────
   function addThroughputError(type, code, msg, dest) {
     var ts = new Date().toLocaleTimeString();
@@ -367,7 +372,6 @@ function renderBatchProgress() {
     if (pctSpan)     pctSpan.textContent = Math.round(p) + '%';
     if (sentSpan)    sentSpan.textContent = d.sent || 0;
     if (failedSpan)  failedSpan.textContent = d.failed || 0;
-    if (retriesSpan) retriesSpan.textContent = d.retryCount || 0;
     if (currRateSpan) currRateSpan.textContent = d.currentRate || 0;
     if (etaSpan)     etaSpan.textContent = d.eta || '--:--';
     if (statusText) {
@@ -383,7 +387,6 @@ function renderBatchProgress() {
     if (pctSpan)     pctSpan.textContent = '0%';
     if (sentSpan)    sentSpan.textContent = '0';
     if (failedSpan)  failedSpan.textContent = '0';
-    if (retriesSpan) retriesSpan.textContent = '0';
     if (currRateSpan) currRateSpan.textContent = '0';
     if (etaSpan)     etaSpan.textContent = '--:--';
     if (statusText)  statusText.textContent = 'Idle';
@@ -397,18 +400,22 @@ function renderBatchProgress() {
     startBtn.addEventListener('click', function() {
       // If there's an active paused job, resume it instead of creating new
       if (activeJobId && typeof socket !== 'undefined') {
+        pendingResume = true;
         socket.emit('throughput:resume', { jobId: activeJobId });
         if (statusText) statusText.textContent = 'Resuming...';
         startBtn.disabled = true;
         pauseBtn.disabled = false;
+        logThroughputEvent('Resuming Job', 'Job ' + activeJobId);
         return;
       }
+
+      // Clear previous error summary and UI when starting fresh
+      resetUI();
 
       var dests = getDest();
       var msg   = getMsg();
       var rate  = parseInt(rateInput ? rateInput.value : 10);
       var total = parseInt(totalInput ? totalInput.value : 100);
-      var retry = parseInt(maxRetriesIn ? maxRetriesIn.value : 3);
 
       if (!dests.length) { addThroughputError('Validation', null, 'No destination(s)'); return; }
       if (!msg.trim())   { addThroughputError('Validation', null, 'Message empty'); return; }
@@ -423,12 +430,12 @@ function renderBatchProgress() {
       if (statusText) statusText.textContent = 'Starting...';
 
       if (typeof socket !== 'undefined') {
+        logThroughputEvent('Starting Job', 'Rate: ' + rate + ' msg/s, Total: ' + total);
         socket.emit('throughput:start', {
           destinations: dests,
           message: msg,
           ratePerSecond: rate,
           totalCount: total,
-          maxRetries: retry,
           overrides: getOverrides(),
         });
       }
@@ -438,10 +445,20 @@ function renderBatchProgress() {
   if (pauseBtn) {
     pauseBtn.addEventListener('click', function() {
       if (typeof socket !== 'undefined') {
+        logThroughputWarning('Pausing Job', 'Job ' + activeJobId);
         socket.emit('throughput:pause', { jobId: activeJobId });
         if (statusText) statusText.textContent = '⏸ Pausing...';
-        startBtn.disabled = false;     // Enable START for resume
-        pauseBtn.disabled = true;      // Disable PAUSE
+        pauseBtn.disabled = true;      // Disable PAUSE immediately
+        // Safety timeout: re-enable START after 3s if throughput:paused never arrives
+        setTimeout(function() {
+          if (statusText && statusText.textContent === '⏸ Pausing...') {
+            statusText.textContent = '⏸ Paused (no response)';
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+          }
+        }, 3000);
+        // STOP stays enabled — user can stop a paused job
+        // START stays disabled — will be enabled when throughput:paused arrives
       }
     });
   }
@@ -449,6 +466,7 @@ function renderBatchProgress() {
   if (stopBtn) {
     stopBtn.addEventListener('click', function() {
       if (typeof socket !== 'undefined') {
+        logThroughputWarning('Stopping Job', 'Job ' + activeJobId);
         socket.emit('throughput:stop', { jobId: activeJobId });
         if (statusText) statusText.textContent = '⏹ Stopping...';
       }
@@ -475,15 +493,23 @@ function renderBatchProgress() {
       if (statusText) statusText.textContent = '⏸ Paused';
       startBtn.disabled = false;
       pauseBtn.disabled = true;
-      if (d.reason === 'throttle') addThroughputError('Auto-Paused', null, 'Job paused due to SMSC throttling');
+      if (d.reason === 'throttle') {
+        addThroughputError('Auto-Paused', null, 'Job paused due to SMSC throttling');
+      } else {
+        logThroughputWarning('Job Paused', d.reason || 'user');
+      }
     });
     socket.on('throughput:resumed', function(d) {
+      pendingResume = false;
       if (statusText) statusText.textContent = '▶ Running';
       startBtn.disabled = true;
       pauseBtn.disabled = false;
+      if (rateInput)  rateInput.value = String(d.rate);
+      if (tgtRateSpan) tgtRateSpan.textContent = String(d.rate);
       logThroughputEvent('Job Resumed', 'Rate: ' + d.rate + ' msg/s');
     });
     socket.on('throughput:completed', function(d) {
+      pendingResume = false;
       if (statusText) statusText.textContent = '✅ Completed';
       startBtn.disabled = false;
       pauseBtn.disabled = true;
@@ -495,22 +521,19 @@ function renderBatchProgress() {
       if (rateInput)  rateInput.value = String(d.newRate);
       if (tgtRateSpan) tgtRateSpan.textContent = String(d.newRate);
       if (currRateSpan) currRateSpan.textContent = String(d.newRate);
-      if (throttleWarn) {
-        throttleWarn.style.display = 'inline-block';
-        setTimeout(function() { throttleWarn.style.display = 'none'; }, 5000);
-      }
+      logThroughputWarning('Rate Updated', d.oldRate + ' → ' + d.newRate + ' msg/s');
     });
     socket.on('throughput:stopped', function(d) {
+      pendingResume = false;
       if (statusText) statusText.textContent = '⏹ Stopped';
       startBtn.disabled = false;
       pauseBtn.disabled = true;
       stopBtn.disabled  = true;
       activeJobId = null;
-    });
-    socket.on('throughput:retry', function(d) {
-      addThroughputError('Retry', null, 'Retrying ' + d.destination + ' (' + d.retryCount + '/' + d.maxRetries + ')');
+      logThroughputWarning('Job Stopped', 'Sent: ' + (d && d.sent || 0) + ', Failed: ' + (d && d.failed || 0));
     });
     socket.on('throughput:cleanup', function() {
+      pendingResume = false;
       startBtn.disabled = false;
       pauseBtn.disabled = true;
       stopBtn.disabled  = true;

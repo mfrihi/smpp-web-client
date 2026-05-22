@@ -81,6 +81,10 @@ const server = smpp.createServer({}, (session) => {
   let boundTon = 1;
   let boundNpi = 1;
 
+  // ── Throttle / License limit ──────────────────────────────────────────
+  const MAX_RATE = 10;                    // "License limit" — 10 SMS per second
+  const submitTimestamps = [];            // Sliding window: timestamps of recent submissions
+
   // ── BIND handlers ────────────────────────────────────────────────────
   session.on('bind_transceiver', (pdu) => {
     boundSystemId = pdu.system_id.toString('utf8') || 'unknown';
@@ -114,7 +118,9 @@ const server = smpp.createServer({}, (session) => {
   // ── UNBIND ───────────────────────────────────────────────────────────
   session.on('unbind', (pdu) => {
     session.send(pdu.response());
-    ok(`Unbound: ${boundSystemId}`);
+    // Clear the sliding window on unbind
+    submitTimestamps.length = 0;
+    ok(`Unbound: ${boundSystemId} — rate counter reset`);
     boundSystemId = null;
     boundMode = null;
     setTimeout(() => session.close(), 100);
@@ -127,10 +133,29 @@ const server = smpp.createServer({}, (session) => {
 
   // ── SUBMIT_SM ────────────────────────────────────────────────────────
   session.on('submit_sm', (pdu) => {
+    // Sliding window: count submissions in the last 1 second
+    const now = Date.now();
+    while (submitTimestamps.length > 0 && submitTimestamps[0] <= now - 1000) {
+      submitTimestamps.shift();
+    }
+    submitTimestamps.push(now);
+
+    // Enforce throttle: reject if over rate limit in current window
+    if (submitTimestamps.length > MAX_RATE) {
+      const overBy = submitTimestamps.length - MAX_RATE;
+      warn(`Rate limit exceeded: ${submitTimestamps.length} SMS in last 1s (limit ${MAX_RATE}/s) — throttled ×${overBy}`);
+      // ESME_RTHROTTLED (0x00000058) — standard SMPP rate-limit response
+      session.send(pdu.response({
+        command_status: 0x00000058,
+        message_id: '',
+      }));
+      return;
+    }
+
     const msgId = `MSG_${String(messages.size + 1).padStart(4, '0')}`;
     const text = getMessageText(pdu);
     const dest = pdu.destination_addr ? pdu.destination_addr.toString() : '';
-    
+
     // Store the message for later operations
     messages.set(msgId, {
       destination_addr: dest,
@@ -148,7 +173,7 @@ const server = smpp.createServer({}, (session) => {
       message_id: msgId,
     }));
 
-    ok(`submit_sm → ${colours.yellow}${msgId}${colours.reset} → ${colours.dim}${dest}${colours.reset} (${messages.size} stored)`);
+    ok(`submit_sm → ${colours.yellow}${msgId}${colours.reset} → ${colours.dim}${dest}${colours.reset} (${submitTimestamps.length}/${MAX_RATE} in current 1s window)`);
 
     // If registered_delivery was requested, send a DLR after 2 seconds
     if (pdu.registered_delivery && pdu.registered_delivery > 0) {

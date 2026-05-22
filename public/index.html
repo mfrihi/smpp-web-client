@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>SMPP v3.4 Web Client</title>
-  <link rel="stylesheet" href="style.css?v=2.1.0-throughput">
+  <link rel="stylesheet" href="style.css?v=2.1.0-throttle-fix">
 </head>
 <body>
   <div class="container">
@@ -42,11 +42,11 @@
             <div class="form-row">
               <div class="form-group">
                 <label>Host</label>
-                <input type="text" id="smsc-host" value="192.168.192.75" placeholder="SMSC hostname or IP">
+                <input type="text" id="smsc-host" value="127.0.0.1" placeholder="SMSC hostname or IP">
               </div>
               <div class="form-group" style="max-width:100px;">
                 <label>Port</label>
-                <input type="number" id="smsc-port" value="9500" placeholder="2775">
+                <input type="number" id="smsc-port" value="2775" placeholder="2775">
               </div>
             </div>
             <div class="form-row">
@@ -340,13 +340,6 @@
                       <span>SMS total</span>
                     </div>
                   </div>
-                  <div class="throughput-field">
-                    <label>🔄 Retry on Throttle</label>
-                    <div class="rate-input">
-                      <input type="number" id="throughput-max-retries" value="3" min="0" max="10" step="1">
-                      <span>max retries</span>
-                    </div>
-                  </div>
                 </div>
 
                 <!-- Action Buttons -->
@@ -367,7 +360,6 @@
                   <div class="progress-stats-throughput">
                     <span>📤 Sent: <span id="throughput-sent">0</span></span>
                     <span>❌ Failed: <span id="throughput-failed">0</span></span>
-                    <span>🔄 Retries: <span id="throughput-retries">0</span></span>
                     <span>⚡ Current Rate: <span id="throughput-current-rate">0</span> msg/s</span>
                     <span>🎯 Target Rate: <span id="throughput-target-rate-display">10</span> msg/s</span>
                     <span>⏱️ ETA: <span id="throughput-eta">--:--</span></span>
@@ -547,6 +539,6 @@
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
-    <script src="app.js?v=2.1.0-throughput"></script>
+    <script src="app.js?v=2.1.4-pause-fix"></script>
 </body>
 </html>
