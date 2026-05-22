@@ -419,7 +419,7 @@ function renderBatchProgress() {
 
       if (!dests.length) { addThroughputError('Validation', null, 'No destination(s)'); return; }
       if (!msg.trim())   { addThroughputError('Validation', null, 'Message empty'); return; }
-      if (rate < 1 || rate > 100) { addThroughputError('Validation', null, 'Rate must be 1-100'); return; }
+      if (rate < 1 || rate > 1000) { addThroughputError('Validation', null, 'Rate must be 1-1000'); return; }
       if (total < 1 || total > 100000) { addThroughputError('Validation', null, 'Total must be 1-100000'); return; }
 
       if (progressArea) progressArea.style.display = 'block';

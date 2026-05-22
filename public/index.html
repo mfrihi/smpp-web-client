@@ -328,10 +328,10 @@
                   <div class="throughput-field">
                     <label>📊 Target Rate</label>
                     <div class="rate-input">
-                      <input type="number" id="throughput-rate" value="10" min="1" max="100" step="1">
+                      <input type="number" id="throughput-rate" value="10" min="1" max="1000" step="1">
                       <span>SMS/sec</span>
                     </div>
-                    <small class="field-hint">Max 100 msg/s</small>
+                    <small class="field-hint">Max 1000 msg/s</small>
                   </div>
                   <div class="throughput-field">
                     <label>🎯 Total to Send</label>
@@ -539,6 +539,6 @@
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
-    <script src="app.js?v=2.1.4-pause-fix"></script>
+    <script src="app.js?v=2.2.0-rate-1000"></script>
 </body>
 </html>
